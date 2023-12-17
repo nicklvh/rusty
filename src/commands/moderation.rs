@@ -1,8 +1,11 @@
+use crate::{
+    structs::{Command, Context, Error, InfractionType},
+    utils::{get_member, handle_moderation, manageable},
+};
 use poise::{
     serenity_prelude::{Color, CreateEmbed, CreateEmbedAuthor, User},
     CreateReply,
 };
-use rusty::{get_member, handle_moderation, manageable, Command, Context, Error, ModerationType};
 
 /// Ban a member! 🔨
 #[poise::command(
@@ -42,7 +45,7 @@ async fn ban(
 
     let reason = reason.unwrap_or(String::from("No reason provided"));
 
-    handle_moderation(ctx, &ModerationType::Ban, &user, &reason)
+    handle_moderation(ctx, &InfractionType::Ban, &user, &reason)
         .await
         .expect_err("error handling ban");
 
@@ -92,7 +95,7 @@ async fn kick(
 
     let reason = reason.unwrap_or(String::from("No reason provided"));
 
-    handle_moderation(ctx, &ModerationType::Kick, &user, &reason)
+    handle_moderation(ctx, &InfractionType::Kick, &user, &reason)
         .await
         .expect_err("error handling kick");
 
@@ -142,14 +145,13 @@ async fn mute(
 
     let reason = reason.unwrap_or(String::from("No reason provided"));
 
-    handle_moderation(ctx, &ModerationType::Mute, &user, &reason)
+    handle_moderation(ctx, &InfractionType::Mute, &user, &reason)
         .await
         .expect_err("error handling mute");
 
-    ctx.guild_id()
-        .unwrap()
-        .kick_with_reason(ctx, &user.id, reason.as_str())
-        .await?;
+    // user_member
+    //     .disable_communication_until_datetime(ctx, Utc)
+    //     .await?;
 
     Ok(())
 }

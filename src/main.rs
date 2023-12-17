@@ -1,41 +1,21 @@
 #![warn(clippy::pedantic)]
 
 mod commands;
+mod database;
+mod events;
+mod structs;
+mod utils;
 
+use crate::{
+    commands::commands,
+    database::connect,
+    events::Handler,
+    structs::{Data, DbConfig, PostgresContainer, ShardManagerContainer},
+};
 use dotenvy::dotenv;
-use poise::serenity_prelude::{
-    async_trait, ClientBuilder, Context, EventHandler, GatewayIntents, Guild, Ready,
-};
-use rusty::{
-    database::utils::{connect, get_database, insert_guild, DbConfig, Guild as DBGuild},
-    PostgresContainer, ShardManagerContainer,
-};
+use poise::serenity_prelude::{ClientBuilder, GatewayIntents};
 use std::env::var;
 use tracing::{error, info};
-
-struct Handler;
-
-#[async_trait]
-impl EventHandler for Handler {
-    async fn ready(&self, _: Context, ready: Ready) {
-        info!("Connected as {}", ready.user.name);
-    }
-
-    async fn guild_create(&self, ctx: Context, guild: Guild, _: Option<bool>) {
-        let id = guild.id.to_string();
-
-        info!("Joined guild {}", guild.name);
-
-        let guild = DBGuild {
-            id: id.as_str(),
-            mod_id: None,
-            audit_id: None,
-            welcome_id: None,
-        };
-
-        insert_guild(&get_database(ctx).await, guild).await;
-    }
-}
 
 #[tokio::main]
 async fn main() {
@@ -61,7 +41,7 @@ async fn main() {
     let db = connect(&db_config).await;
 
     let options = poise::FrameworkOptions {
-        commands: commands::commands(),
+        commands: commands(),
         pre_command: |ctx| {
             Box::pin(async move {
                 info!(
@@ -92,7 +72,7 @@ async fn main() {
         .setup(move |ctx, _ready, framework| {
             Box::pin(async move {
                 poise::builtins::register_globally(ctx, &framework.options().commands).await?;
-                Ok(rusty::Data {})
+                Ok(Data {})
             })
         })
         .build();

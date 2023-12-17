@@ -1,9 +1,8 @@
+use crate::structs::{Command, Context, Error};
 use poise::{
     serenity_prelude::{Color, CreateEmbed, CreateEmbedAuthor, User},
     CreateReply,
 };
-
-use rusty::{Command, Context, Error};
 
 /// Shows yours or another user's avatar! 🖼️
 #[poise::command(slash_command)]

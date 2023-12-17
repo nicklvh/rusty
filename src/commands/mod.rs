@@ -2,7 +2,7 @@ pub mod fun;
 pub mod general;
 pub mod moderation;
 
-use rusty::{Command, Context, Error};
+use crate::structs::Command;
 
 pub fn commands() -> Vec<Command> {
     fun::commands()

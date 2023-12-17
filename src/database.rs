@@ -1,21 +1,7 @@
-use crate::PostgresContainer;
+use crate::structs::{DbConfig, Guild, PostgresContainer};
 use poise::serenity_prelude::Context;
 use sqlx::{migrate, PgPool, Pool, Postgres};
 use tracing::info;
-
-pub struct Guild<'a> {
-    pub id: &'a str,
-    pub mod_id: Option<&'a str>,
-    pub audit_id: Option<&'a str>,
-    pub welcome_id: Option<&'a str>,
-}
-
-pub struct DbConfig {
-    pub host: String,
-    pub port: u16,
-    pub username: String,
-    pub password: String,
-}
 
 pub async fn connect(db_config: &DbConfig) -> Pool<Postgres> {
     let db = sqlx::postgres::PgPoolOptions::new()
@@ -37,7 +23,7 @@ pub async fn connect(db_config: &DbConfig) -> Pool<Postgres> {
     db
 }
 
-pub async fn get_database(ctx: Context) -> Pool<Postgres> {
+pub async fn get_pool(ctx: Context) -> Pool<Postgres> {
     ctx.data
         .read()
         .await
@@ -76,4 +62,6 @@ pub async fn insert_guild(pool: &PgPool, guild: Guild<'_>) {
     .execute(pool)
     .await
     .expect("Error inserting guild");
+
+    info!("Inserted guild {}", guild.id);
 }

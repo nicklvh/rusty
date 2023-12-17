@@ -1,43 +1,11 @@
-pub mod database;
-
+use crate::structs::{Context, Error, InfractionType};
 use poise::{
     serenity_prelude::{
-        prelude::TypeMapKey, Color, CreateEmbed, CreateEmbedAuthor, CreateMessage, Member, RoleId,
-        ShardManager, Timestamp, User, UserId,
+        Color, CreateEmbed, CreateEmbedAuthor, CreateMessage, Member, RoleId, Timestamp, User,
+        UserId,
     },
     CreateReply,
 };
-use serde::Deserialize;
-use sqlx::{Pool, Postgres};
-use std::sync::Arc;
-
-pub struct Data {}
-pub type Error = Box<dyn std::error::Error + Send + Sync>;
-pub type Context<'a> = poise::Context<'a, Data, Error>;
-pub type Command = poise::Command<Data, Error>;
-
-pub struct ShardManagerContainer;
-pub struct PostgresContainer;
-
-impl TypeMapKey for ShardManagerContainer {
-    type Value = Arc<ShardManager>;
-}
-
-impl TypeMapKey for PostgresContainer {
-    type Value = Pool<Postgres>;
-}
-
-#[derive(Deserialize)]
-pub struct PetResponse {
-    pub url: String,
-}
-
-pub enum ModerationType {
-    Ban,
-    Kick,
-    Mute,
-    Warn,
-}
 
 pub async fn manageable(ctx: Context<'_>, member: &Member, target: &Member) -> bool {
     let member_highest_role = highest_role_position(ctx, &member.roles);
@@ -80,7 +48,7 @@ pub async fn get_member(ctx: Context<'_>, id: UserId) -> Member {
 
 pub async fn handle_moderation(
     ctx: Context<'_>,
-    mod_type: &ModerationType,
+    mod_type: &InfractionType,
     user: &User,
     reason: &String,
 ) -> Result<(), Error> {
@@ -95,15 +63,15 @@ pub async fn handle_moderation(
 
 pub async fn send_mod_msg_to_user(
     ctx: Context<'_>,
-    mod_type: &ModerationType,
+    mod_type: &InfractionType,
     user: &User,
     reason: &String,
 ) -> Result<(), Error> {
     let mod_type = match mod_type {
-        ModerationType::Ban => "banned",
-        ModerationType::Kick => "kicked",
-        ModerationType::Mute => "muted",
-        ModerationType::Warn => "warned",
+        InfractionType::Ban => "banned",
+        InfractionType::Kick => "kicked",
+        InfractionType::Mute => "muted",
+        InfractionType::Warn => "warned",
     };
 
     user.dm(
@@ -130,15 +98,15 @@ pub async fn send_mod_msg_to_user(
 
 pub async fn send_mod_msg_to_channel(
     ctx: Context<'_>,
-    mod_type: &ModerationType,
+    mod_type: &InfractionType,
     user: &User,
     reason: &String,
 ) -> Result<(), Error> {
     let mod_type = match mod_type {
-        ModerationType::Ban => "Banned",
-        ModerationType::Kick => "Kicked",
-        ModerationType::Mute => "Muted",
-        ModerationType::Warn => "Warned",
+        InfractionType::Ban => "Banned",
+        InfractionType::Kick => "Kicked",
+        InfractionType::Mute => "Muted",
+        InfractionType::Warn => "Warned",
     };
 
     ctx.send(
