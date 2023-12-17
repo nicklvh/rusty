@@ -1,8 +1,8 @@
-use crate::utils::{get_member, manageable, Command, Context, Error};
 use poise::{
-    serenity_prelude::{Color, CreateEmbed, CreateEmbedAuthor, CreateMessage, Timestamp, User},
+    serenity_prelude::{Color, CreateEmbed, CreateEmbedAuthor, User},
     CreateReply,
 };
+use rusty::{get_member, handle_moderation, manageable, Command, Context, Error, ModerationType};
 
 /// Ban a member! 🔨
 #[poise::command(
@@ -24,56 +24,32 @@ async fn ban(
     let can_manage = manageable(ctx, &author_member, &user_member).await;
     let can_i_manage = manageable(ctx, &bot_member, &user_member).await;
 
+    let string: String;
+
+    if !can_manage && !can_i_manage {
+        string = String::from("you and I");
+    } else if !can_manage {
+        string = String::from("you");
+    } else {
+        string = String::from("me");
+    };
+
     if !can_manage || !can_i_manage {
-        let embed_author_builder = CreateEmbedAuthor::new("Error").icon_url(user.face());
-
-        let embed_builder = CreateEmbed::new()
-            .author(embed_author_builder)
-            .description(format!("<@{}> has a higher role than you or me, or is the owner of the server, so I cannot ban them.", user.id))
-            .color(Color::BLUE);
-
-        let message_builder = CreateReply::default().embed(embed_builder);
-
-        ctx.send(message_builder).await?;
+        ctx.send(CreateReply::default().embed(CreateEmbed::new().author(CreateEmbedAuthor::new("Error").icon_url(user.face())).description(format!("<@{}> has a higher role than {}, or is the owner of the server, so I cannot ban them.", user.id, string)).color(Color::BLUE))).await?;
 
         return Ok(());
     }
 
     let reason = reason.unwrap_or(String::from("No reason provided"));
 
-    let embed_author_builder = {
-        let guild = ctx.guild().unwrap();
-        CreateEmbedAuthor::new(format!("You have been banned from {}", guild.name))
-            .icon_url(user.face())
-    };
-
-    let embed_builder = CreateEmbed::new()
-        .author(embed_author_builder)
-        .field("Reason", format!("<@{}>", user.id), true)
-        .timestamp(Timestamp::now())
-        .color(Color::BLUE);
-
-    let message_builder = CreateMessage::default().embed(embed_builder);
-
-    user.dm(ctx, message_builder).await?;
+    handle_moderation(ctx, &ModerationType::Ban, &user, &reason)
+        .await
+        .expect_err("error handling ban");
 
     ctx.guild_id()
         .unwrap()
-        .ban_with_reason(ctx, &user, 7, reason)
+        .ban_with_reason(ctx, &user.id, 7, reason.as_str())
         .await?;
-
-    let embed_author_builder =
-        CreateEmbedAuthor::new(format!("Banned {}", user.name)).icon_url(user.face());
-
-    let embed_builder = CreateEmbed::new()
-        .author(embed_author_builder)
-        .field("User", format!("<@{}>", user.id), true)
-        .timestamp(Timestamp::now())
-        .color(Color::BLUE);
-
-    let reply_builder = CreateReply::default().embed(embed_builder);
-
-    ctx.send(reply_builder).await?;
 
     Ok(())
 }
@@ -98,60 +74,86 @@ async fn kick(
     let can_manage = manageable(ctx, &author_member, &user_member).await;
     let can_i_manage = manageable(ctx, &bot_member, &user_member).await;
 
+    let string: String;
+
+    if !can_manage && !can_i_manage {
+        string = String::from("you and I");
+    } else if !can_manage {
+        string = String::from("you");
+    } else {
+        string = String::from("me");
+    };
+
     if !can_manage || !can_i_manage {
-        let embed_author_builder = CreateEmbedAuthor::new("Error").icon_url(user.face());
-
-        let embed_builder = CreateEmbed::new()
-            .author(embed_author_builder)
-            .description(format!("<@{}> has a higher role than you or me, or is the owner of the server, so I cannot kick them.", user.id))
-            .color(Color::BLUE);
-
-        let message_builder = CreateReply::default().embed(embed_builder);
-
-        ctx.send(message_builder).await?;
+        ctx.send(CreateReply::default().embed(CreateEmbed::new().author(CreateEmbedAuthor::new("Error").icon_url(user.face())).description(format!("<@{}> has a higher role than {}, or is the owner of the server, so I cannot ban them.", user.id, string)).color(Color::BLUE))).await?;
 
         return Ok(());
     }
 
     let reason = reason.unwrap_or(String::from("No reason provided"));
 
-    let embed_author_builder = CreateEmbedAuthor::new(format!(
-        "You have been kicked from {}",
-        ctx.guild().unwrap().name
-    ))
-    .icon_url(user.face());
-
-    let embed_builder = CreateEmbed::new()
-        .author(embed_author_builder)
-        .field("Reason", format!("<@{}>", user.id), true)
-        .timestamp(Timestamp::now())
-        .color(Color::BLUE);
-
-    let message_builder = CreateMessage::default().embed(embed_builder);
-
-    user.dm(ctx, message_builder).await?;
+    handle_moderation(ctx, &ModerationType::Kick, &user, &reason)
+        .await
+        .expect_err("error handling kick");
 
     ctx.guild_id()
         .unwrap()
         .kick_with_reason(ctx, &user.id, reason.as_str())
         .await?;
 
-    let embed_author_builder =
-        CreateEmbedAuthor::new(format!("Kicked {}", user.name)).icon_url(user.face());
+    Ok(())
+}
 
-    let embed_builder = CreateEmbed::new()
-        .author(embed_author_builder)
-        .field("User", format!("<@{}>", user.id), true)
-        .timestamp(Timestamp::now())
-        .color(Color::BLUE);
+/// Mute a member! 🔨
+#[poise::command(
+    slash_command,
+    default_member_permissions = "MODERATE_MEMBERS",
+    required_bot_permissions = "MODERATE_MEMBERS",
+    required_permissions = "MODERATE_MEMBERS",
+    guild_only = true
+)]
+async fn mute(
+    ctx: Context<'_>,
+    #[description = "The user to mute"] user: User,
+    #[description = "The reason for muting this user"] reason: Option<String>,
+) -> Result<(), Error> {
+    let user_member = get_member(ctx, user.id).await;
+    let author_member = ctx.author_member().await.unwrap().into_owned();
+    let bot_user_id = { ctx.cache().current_user().id };
+    let bot_member = get_member(ctx, bot_user_id).await;
+    let can_manage = manageable(ctx, &author_member, &user_member).await;
+    let can_i_manage = manageable(ctx, &bot_member, &user_member).await;
 
-    let reply_builder = CreateReply::default().embed(embed_builder);
+    let string: String;
 
-    ctx.send(reply_builder).await?;
+    if !can_manage && !can_i_manage {
+        string = String::from("you and I");
+    } else if !can_manage {
+        string = String::from("you");
+    } else {
+        string = String::from("me");
+    };
+
+    if !can_manage || !can_i_manage {
+        ctx.send(CreateReply::default().embed(CreateEmbed::new().author(CreateEmbedAuthor::new("Error").icon_url(user.face())).description(format!("<@{}> has a higher role than {}, or is the owner of the server, so I cannot mute them.", user.id, string)).color(Color::BLUE))).await?;
+
+        return Ok(());
+    }
+
+    let reason = reason.unwrap_or(String::from("No reason provided"));
+
+    handle_moderation(ctx, &ModerationType::Mute, &user, &reason)
+        .await
+        .expect_err("error handling mute");
+
+    ctx.guild_id()
+        .unwrap()
+        .kick_with_reason(ctx, &user.id, reason.as_str())
+        .await?;
 
     Ok(())
 }
 
-pub fn commands() -> [Command; 2] {
-    [ban(), kick()]
+pub fn commands() -> [Command; 3] {
+    [ban(), kick(), mute()]
 }

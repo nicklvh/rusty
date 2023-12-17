@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS guilds (
+    id VARCHAR(255) PRIMARY KEY,
+    mod_id VARCHAR(255) NULL,
+    audit_id VARCHAR(255) NULL,
+    welcome_id VARCHAR(255) NULL
+);

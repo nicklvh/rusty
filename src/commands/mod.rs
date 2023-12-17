@@ -2,7 +2,7 @@ pub mod fun;
 pub mod general;
 pub mod moderation;
 
-use super::utils::{Command, Context, Error};
+use rusty::{Command, Context, Error};
 
 pub fn commands() -> Vec<Command> {
     fun::commands()

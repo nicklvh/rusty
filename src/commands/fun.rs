@@ -1,10 +1,10 @@
 use super::{Command, Context, Error};
-use crate::utils::PetResponse;
 use poise::{
     serenity_prelude::{Color, CreateEmbed, CreateEmbedAuthor},
     CreateReply,
 };
 use reqwest::get;
+use rusty::PetResponse;
 
 /// Shows a cute cat! 😻
 #[poise::command(slash_command)]

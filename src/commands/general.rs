@@ -3,7 +3,7 @@ use poise::{
     CreateReply,
 };
 
-use crate::utils::{Command, Context, Error};
+use rusty::{Command, Context, Error};
 
 /// Shows yours or another user's avatar! 🖼️
 #[poise::command(slash_command)]
