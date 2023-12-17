@@ -1,4 +1,7 @@
-use crate::structs::{Context, Error, InfractionType};
+use crate::{
+    database::{get_pool, insert_infraction},
+    structs::{Context, Error, Infraction, InfractionType},
+};
 use poise::{
     serenity_prelude::{
         Color, CreateEmbed, CreateEmbedAuthor, CreateMessage, Member, RoleId, Timestamp, User,
@@ -48,15 +51,26 @@ pub async fn get_member(ctx: Context<'_>, id: UserId) -> Member {
 
 pub async fn handle_moderation(
     ctx: Context<'_>,
-    mod_type: &InfractionType,
+    mod_type: InfractionType,
     user: &User,
     reason: &String,
 ) -> Result<(), Error> {
-    send_mod_msg_to_user(ctx, mod_type, user, reason)
+    send_mod_msg_to_user(ctx, &mod_type, user, reason)
         .await
         .expect_err(&format!("{} has their dms off", user.tag()).to_string());
 
-    send_mod_msg_to_channel(ctx, mod_type, user, reason).await?;
+    send_mod_msg_to_channel(ctx, &mod_type, user, reason).await?;
+
+    let infraction = Infraction {
+        guild_id: ctx.guild_id().unwrap().to_string(),
+        member_id: user.id.to_string(),
+        moderator_id: ctx.author().id.to_string(),
+        reason: reason.to_string(),
+        infraction_type: mod_type,
+        created_at: None,
+    };
+
+    insert_infraction(&get_pool(ctx.serenity_context()).await, infraction).await;
 
     Ok(())
 }

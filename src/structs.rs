@@ -1,6 +1,6 @@
 use poise::serenity_prelude::{prelude::TypeMapKey, ShardManager};
 use serde::{Deserialize, Serialize};
-use sqlx::{Pool, Postgres, Type};
+use sqlx::{types::uuid::Timestamp, Pool, Postgres, Type};
 use std::sync::Arc;
 
 #[derive(Deserialize)]
@@ -17,11 +17,20 @@ pub enum InfractionType {
     Warn,
 }
 
-pub struct Guild<'a> {
-    pub id: &'a str,
-    pub mod_id: Option<&'a str>,
-    pub audit_id: Option<&'a str>,
-    pub welcome_id: Option<&'a str>,
+pub struct Guild {
+    pub id: String,
+    pub mod_id: Option<String>,
+    pub audit_id: Option<String>,
+    pub welcome_id: Option<String>,
+}
+
+pub struct Infraction {
+    pub guild_id: String,
+    pub member_id: String,
+    pub moderator_id: String,
+    pub reason: String,
+    pub infraction_type: InfractionType,
+    pub created_at: Option<Timestamp>,
 }
 
 pub struct DbConfig {

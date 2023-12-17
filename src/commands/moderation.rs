@@ -45,7 +45,7 @@ async fn ban(
 
     let reason = reason.unwrap_or(String::from("No reason provided"));
 
-    handle_moderation(ctx, &InfractionType::Ban, &user, &reason)
+    handle_moderation(ctx, InfractionType::Ban, &user, &reason)
         .await
         .expect_err("error handling ban");
 
@@ -95,7 +95,7 @@ async fn kick(
 
     let reason = reason.unwrap_or(String::from("No reason provided"));
 
-    handle_moderation(ctx, &InfractionType::Kick, &user, &reason)
+    handle_moderation(ctx, InfractionType::Kick, &user, &reason)
         .await
         .expect_err("error handling kick");
 
@@ -145,7 +145,7 @@ async fn mute(
 
     let reason = reason.unwrap_or(String::from("No reason provided"));
 
-    handle_moderation(ctx, &InfractionType::Mute, &user, &reason)
+    handle_moderation(ctx, InfractionType::Mute, &user, &reason)
         .await
         .expect_err("error handling mute");
 

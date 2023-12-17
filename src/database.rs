@@ -1,4 +1,4 @@
-use crate::structs::{DbConfig, Guild, PostgresContainer};
+use crate::structs::{DbConfig, Guild, Infraction, InfractionType, PostgresContainer};
 use poise::serenity_prelude::Context;
 use sqlx::{migrate, PgPool, Pool, Postgres};
 use tracing::info;
@@ -23,7 +23,7 @@ pub async fn connect(db_config: &DbConfig) -> Pool<Postgres> {
     db
 }
 
-pub async fn get_pool(ctx: Context) -> Pool<Postgres> {
+pub async fn get_pool(ctx: &Context) -> Pool<Postgres> {
     ctx.data
         .read()
         .await
@@ -32,7 +32,7 @@ pub async fn get_pool(ctx: Context) -> Pool<Postgres> {
         .clone()
 }
 
-async fn guild_exists(pool: &PgPool, guild_id: &str) -> bool {
+async fn guild_exists(pool: &PgPool, guild_id: &String) -> bool {
     let result = sqlx::query!(
         "SELECT COUNT(*) as count FROM guilds WHERE id = $1",
         guild_id
@@ -46,8 +46,8 @@ async fn guild_exists(pool: &PgPool, guild_id: &str) -> bool {
     }
 }
 
-pub async fn insert_guild(pool: &PgPool, guild: Guild<'_>) {
-    if guild_exists(pool, guild.id).await {
+pub async fn insert_guild(pool: &Pool<Postgres>, guild: &Guild) {
+    if guild_exists(pool, &guild.id).await {
         info!("Guild {} already exists", guild.id);
         return;
     }
@@ -64,4 +64,20 @@ pub async fn insert_guild(pool: &PgPool, guild: Guild<'_>) {
     .expect("Error inserting guild");
 
     info!("Inserted guild {}", guild.id);
+}
+
+pub async fn insert_infraction(pool: &Pool<Postgres>, infraction: Infraction) {
+    sqlx::query_as!(Infraction,
+        "INSERT INTO infractions (guild_id, member_id, moderator_id, reason, infraction_type) VALUES ($1, $2, $3, $4, $5)",
+        infraction.guild_id,
+        infraction.member_id,
+        infraction.moderator_id,
+        infraction.reason,
+        infraction.infraction_type as InfractionType
+    )
+    .execute(pool)
+    .await
+    .expect("Error inserting infraction");
+
+    info!("Inserted infraction for {}", infraction.member_id);
 }

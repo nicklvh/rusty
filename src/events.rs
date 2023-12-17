@@ -19,12 +19,12 @@ impl EventHandler for Handler {
         info!("Joined guild {}", guild.name);
 
         let guild = DBGuild {
-            id: id.as_str(),
+            id,
             mod_id: None,
             audit_id: None,
             welcome_id: None,
         };
 
-        insert_guild(&get_pool(ctx).await, guild).await;
+        insert_guild(&get_pool(&ctx).await, &guild).await;
     }
 }
