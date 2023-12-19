@@ -15,6 +15,7 @@ use crate::{
 use dotenvy::dotenv;
 use poise::serenity_prelude::{ClientBuilder, GatewayIntents};
 use std::env::var;
+use structs::ReqwestClientContainer;
 use tracing::{error, info};
 
 #[tokio::main]
@@ -83,10 +84,13 @@ async fn main() {
         .await
         .expect("Error creating client");
 
+    let reqwest_client = reqwest::Client::new();
+
     {
         let mut data = client.data.write().await;
         data.insert::<ShardManagerContainer>(client.shard_manager.clone());
         data.insert::<PostgresContainer>(db.clone());
+        data.insert::<ReqwestClientContainer>(reqwest_client.clone());
     }
 
     let shard_manager = client.shard_manager.clone();

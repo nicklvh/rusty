@@ -1,14 +1,15 @@
 use poise::serenity_prelude::{prelude::TypeMapKey, ShardManager};
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use sqlx::{types::uuid::Timestamp, Pool, Postgres, Type};
+use sqlx::{types::time::PrimitiveDateTime, Pool, Postgres, Type};
 use std::sync::Arc;
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct PetResponse {
     pub url: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Type)]
+#[derive(Type, Debug, Clone, Copy)]
 #[sqlx(type_name = "infraction_type", rename_all = "lowercase")]
 pub enum InfractionType {
     Ban,
@@ -30,7 +31,7 @@ pub struct Infraction {
     pub moderator_id: String,
     pub reason: String,
     pub infraction_type: InfractionType,
-    pub created_at: Option<Timestamp>,
+    pub created_at: Option<PrimitiveDateTime>,
 }
 
 pub struct DbConfig {
@@ -47,6 +48,7 @@ pub type Command = poise::Command<Data, Error>;
 
 pub struct ShardManagerContainer;
 pub struct PostgresContainer;
+pub struct ReqwestClientContainer;
 
 impl TypeMapKey for ShardManagerContainer {
     type Value = Arc<ShardManager>;
@@ -54,4 +56,8 @@ impl TypeMapKey for ShardManagerContainer {
 
 impl TypeMapKey for PostgresContainer {
     type Value = Pool<Postgres>;
+}
+
+impl TypeMapKey for ReqwestClientContainer {
+    type Value = Client;
 }

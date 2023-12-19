@@ -1,7 +1,7 @@
 use crate::structs::{DbConfig, Guild, Infraction, InfractionType, PostgresContainer};
 use poise::serenity_prelude::Context;
 use sqlx::{migrate, PgPool, Pool, Postgres};
-use tracing::info;
+use tracing::{error, info};
 
 pub async fn connect(db_config: &DbConfig) -> Pool<Postgres> {
     let db = sqlx::postgres::PgPoolOptions::new()
@@ -46,7 +46,9 @@ async fn guild_exists(pool: &PgPool, guild_id: &String) -> bool {
     }
 }
 
-pub async fn insert_guild(pool: &Pool<Postgres>, guild: &Guild) {
+pub async fn insert_guild(ctx: &Context, guild: &Guild) {
+    let pool = &get_pool(ctx).await;
+
     if guild_exists(pool, &guild.id).await {
         info!("Guild {} already exists", guild.id);
         return;
@@ -66,9 +68,28 @@ pub async fn insert_guild(pool: &Pool<Postgres>, guild: &Guild) {
     info!("Inserted guild {}", guild.id);
 }
 
-pub async fn insert_infraction(pool: &Pool<Postgres>, infraction: Infraction) {
-    sqlx::query_as!(Infraction,
-        "INSERT INTO infractions (guild_id, member_id, moderator_id, reason, infraction_type) VALUES ($1, $2, $3, $4, $5)",
+pub async fn get_guild(ctx: &Context, guild_id: &String) -> Option<Guild> {
+    let pool = &get_pool(ctx).await;
+
+    let result = sqlx::query_as!(
+        Guild,
+        "SELECT id, mod_id, audit_id, welcome_id FROM guilds WHERE id = $1",
+        guild_id
+    )
+    .fetch_one(pool)
+    .await;
+
+    match result {
+        Ok(guild) => Some(guild),
+        Err(_) => None,
+    }
+}
+
+pub async fn insert_infraction(ctx: &Context, infraction: &Infraction) {
+    let pool = &get_pool(ctx).await;
+
+    if let Err(e) = sqlx::query_as!(Infraction,
+        r#"INSERT INTO infractions (guild_id, member_id, moderator_id, reason, infraction_type) VALUES ($1, $2, $3, $4, $5)"#,
         infraction.guild_id,
         infraction.member_id,
         infraction.moderator_id,
@@ -76,8 +97,26 @@ pub async fn insert_infraction(pool: &Pool<Postgres>, infraction: Infraction) {
         infraction.infraction_type as InfractionType
     )
     .execute(pool)
-    .await
-    .expect("Error inserting infraction");
+    .await {
+        error!("Error inserting infraction: {}", e);
+        return;
+    }
 
     info!("Inserted infraction for {}", infraction.member_id);
+}
+
+pub async fn get_infractions(pool: &PgPool, guild_id: &str, member_id: &str) -> Vec<Infraction> {
+    let result = sqlx::query_as!(
+        Infraction,
+        r#"SELECT guild_id, member_id, moderator_id, reason, infraction_type as "infraction_type: InfractionType", created_at FROM infractions WHERE guild_id = $1 AND member_id = $2"#,
+        guild_id,
+        member_id
+    )
+    .fetch_all(pool)
+    .await;
+
+    match result {
+        Ok(infractions) => infractions,
+        Err(_) => Vec::new(),
+    }
 }

@@ -1,14 +1,16 @@
 use crate::{
-    database::{get_pool, insert_infraction},
-    structs::{Context, Error, Infraction, InfractionType},
+    database::{get_guild, insert_guild, insert_infraction},
+    structs::{Context, Error, Guild, Infraction, InfractionType, ReqwestClientContainer},
 };
 use poise::{
     serenity_prelude::{
-        Color, CreateEmbed, CreateEmbedAuthor, CreateMessage, Member, RoleId, Timestamp, User,
-        UserId,
+        ChannelId, Color, Context as SerenityContext, CreateEmbed, CreateEmbedAuthor,
+        CreateMessage, Member, RoleId, Timestamp, User, UserId,
     },
     CreateReply,
 };
+use reqwest::Client;
+use tracing::error;
 
 pub async fn manageable(ctx: Context<'_>, member: &Member, target: &Member) -> bool {
     let member_highest_role = highest_role_position(ctx, &member.roles);
@@ -55,11 +57,8 @@ pub async fn handle_moderation(
     user: &User,
     reason: &String,
 ) -> Result<(), Error> {
-    send_mod_msg_to_user(ctx, &mod_type, user, reason)
-        .await
-        .expect_err(&format!("{} has their dms off", user.tag()).to_string());
-
-    send_mod_msg_to_channel(ctx, &mod_type, user, reason).await?;
+    send_mod_msg_to_user(ctx, &mod_type, user, reason).await;
+    send_mod_msg_to_channel(ctx, &mod_type, user, reason).await;
 
     let infraction = Infraction {
         guild_id: ctx.guild_id().unwrap().to_string(),
@@ -70,7 +69,41 @@ pub async fn handle_moderation(
         created_at: None,
     };
 
-    insert_infraction(&get_pool(ctx.serenity_context()).await, infraction).await;
+    insert_guild(
+        ctx.serenity_context(),
+        &Guild {
+            id: ctx.guild_id().unwrap().to_string(),
+            mod_id: None,
+            audit_id: None,
+            welcome_id: None,
+        },
+    )
+    .await;
+    insert_infraction(ctx.serenity_context(), &infraction).await;
+
+    let guild = if let Some(g) =
+        get_guild(ctx.serenity_context(), &ctx.guild_id().unwrap().to_string()).await
+    {
+        g
+    } else {
+        let guild = Guild {
+            id: ctx.guild_id().unwrap().to_string(),
+            mod_id: None,
+            audit_id: None,
+            welcome_id: None,
+        };
+
+        insert_guild(ctx.serenity_context(), &guild).await;
+
+        guild
+    };
+
+    if guild.mod_id.is_some() {
+        let mod_id = guild.mod_id.unwrap();
+        let modlog_id = ChannelId::from(mod_id.parse::<u64>().unwrap());
+
+        send_mod_msg_to_modlog(&ctx, &mod_type, user, reason, modlog_id).await;
+    }
 
     Ok(())
 }
@@ -80,7 +113,11 @@ pub async fn send_mod_msg_to_user(
     mod_type: &InfractionType,
     user: &User,
     reason: &String,
-) -> Result<(), Error> {
+) {
+    if user.bot {
+        return;
+    }
+
     let mod_type = match mod_type {
         InfractionType::Ban => "banned",
         InfractionType::Kick => "kicked",
@@ -88,26 +125,28 @@ pub async fn send_mod_msg_to_user(
         InfractionType::Warn => "warned",
     };
 
-    user.dm(
-        ctx,
-        CreateMessage::default().embed(
-            CreateEmbed::new()
-                .author(
-                    CreateEmbedAuthor::new(format!(
-                        "You have been {} from {}",
-                        mod_type,
-                        ctx.guild().unwrap().name
-                    ))
-                    .icon_url(user.face()),
-                )
-                .field("Reason", reason.to_string(), true)
-                .timestamp(Timestamp::now())
-                .color(Color::BLUE),
-        ),
-    )
-    .await?;
-
-    Ok(())
+    if let Err(e) = user
+        .dm(
+            ctx,
+            CreateMessage::default().embed(
+                CreateEmbed::new()
+                    .author(
+                        CreateEmbedAuthor::new(format!(
+                            "You have been {} from {}",
+                            mod_type,
+                            ctx.guild().unwrap().name
+                        ))
+                        .icon_url(user.face()),
+                    )
+                    .field("Reason", reason.to_string(), true)
+                    .timestamp(Timestamp::now())
+                    .color(Color::BLUE),
+            ),
+        )
+        .await
+    {
+        error!("Error: {}", e);
+    }
 }
 
 pub async fn send_mod_msg_to_channel(
@@ -115,7 +154,7 @@ pub async fn send_mod_msg_to_channel(
     mod_type: &InfractionType,
     user: &User,
     reason: &String,
-) -> Result<(), Error> {
+) {
     let mod_type = match mod_type {
         InfractionType::Ban => "Banned",
         InfractionType::Kick => "Kicked",
@@ -123,20 +162,87 @@ pub async fn send_mod_msg_to_channel(
         InfractionType::Warn => "Warned",
     };
 
-    ctx.send(
-        CreateReply::default().embed(
-            CreateEmbed::new()
-                .author(
-                    CreateEmbedAuthor::new(format!("{} {}", mod_type, user.name))
-                        .icon_url(user.face()),
-                )
-                .field("User", format!("<@{}>", user.id), true)
-                .field("Reason", reason.to_string(), true)
-                .timestamp(Timestamp::now())
-                .color(Color::BLUE),
-        ),
-    )
-    .await?;
+    if let Err(e) = ctx
+        .send(
+            CreateReply::default().embed(
+                CreateEmbed::new()
+                    .author(
+                        CreateEmbedAuthor::new(format!("{} {}", mod_type, user.name))
+                            .icon_url(user.face()),
+                    )
+                    .field("User", format!("<@{}>", user.id), true)
+                    .field("Reason", reason.to_string(), true)
+                    .timestamp(Timestamp::now())
+                    .color(Color::BLUE),
+            ),
+        )
+        .await
+    {
+        error!("Error: {}", e);
+    }
+}
 
-    Ok(())
+pub async fn send_mod_msg_to_modlog(
+    ctx: &Context<'_>,
+    mod_type: &InfractionType,
+    user: &User,
+    reason: &String,
+    modlog_id: ChannelId,
+) {
+    let mod_type = match mod_type {
+        InfractionType::Ban => "Banned",
+        InfractionType::Kick => "Kicked",
+        InfractionType::Mute => "Muted",
+        InfractionType::Warn => "Warned",
+    };
+
+    let channel = ctx.http().get_channel(modlog_id).await;
+
+    if channel.is_err() {
+        return error!("Modlog channel not found");
+    }
+
+    if let Err(e) = ctx
+        .send(
+            CreateReply::default().embed(
+                CreateEmbed::new()
+                    .author(
+                        CreateEmbedAuthor::new(format!("{} {}", mod_type, user.name))
+                            .icon_url(user.face()),
+                    )
+                    .field("User", format!("<@{}>", user.id), true)
+                    .field("Reason", reason.to_string(), true)
+                    .timestamp(Timestamp::now())
+                    .color(Color::BLUE),
+            ),
+        )
+        .await
+    {
+        error!("Error: {}", e);
+    }
+}
+
+pub async fn get_reqwest_client(ctx: &SerenityContext) -> Client {
+    ctx.data
+        .read()
+        .await
+        .get::<ReqwestClientContainer>()
+        .unwrap()
+        .clone()
+}
+
+pub async fn send_error_msg(ctx: Context<'_>, msg: &str) {
+    if let Err(e) = ctx
+        .send(
+            CreateReply::default().embed(
+                CreateEmbed::new()
+                    .author(CreateEmbedAuthor::new("Error").icon_url(ctx.author().face()))
+                    .description(msg)
+                    .color(Color::RED),
+            ),
+        )
+        .await
+    {
+        error!("Error: {}", e);
+    }
 }
