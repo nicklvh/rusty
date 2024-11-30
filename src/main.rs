@@ -64,7 +64,7 @@ async fn main() {
         ..Default::default()
     };
 
-    let token = std::env::var("DISCORD_TOKEN").expect("missing DISCORD_TOKEN");
+    let token = std::env::var("TOKEN").expect("missing TOKEN");
 
     let intents = GatewayIntents::GUILD_MEMBERS | GatewayIntents::GUILDS;
 
